@@ -1,0 +1,514 @@
+{
+  "engine_version": "0.3.0",
+  "input": {
+    "birth_datetime_local": "1996-03-14 11:11:00",
+    "calendar": "solar",
+    "lunar_input": null,
+    "birth_place": {
+      "name": "서울",
+      "lat": 37.5665,
+      "lng": 126.978,
+      "city_fallback": false
+    },
+    "timezone": "Asia/Seoul",
+    "true_solar_time_applied": true,
+    "gender": "여성"
+  },
+  "pillars": {
+    "year": {
+      "stem": "丙",
+      "branch": "子",
+      "ganzhi": "丙子",
+      "stem_element": "fire",
+      "branch_element": "water",
+      "ten_god": {
+        "stem": "편관",
+        "branch": "상관"
+      },
+      "hidden_stems": [
+        {
+          "stem": "壬",
+          "position": "여기",
+          "position_en": "residual",
+          "ten_god": "식신"
+        },
+        {
+          "stem": "癸",
+          "position": "정기",
+          "position_en": "primary",
+          "ten_god": "상관"
+        }
+      ],
+      "twelve_stage": "사",
+      "is_void": false
+    },
+    "month": {
+      "stem": "辛",
+      "branch": "卯",
+      "ganzhi": "辛卯",
+      "stem_element": "metal",
+      "branch_element": "wood",
+      "ten_god": {
+        "stem": "겁재",
+        "branch": "정재"
+      },
+      "hidden_stems": [
+        {
+          "stem": "甲",
+          "position": "여기",
+          "position_en": "residual",
+          "ten_god": "편재"
+        },
+        {
+          "stem": "乙",
+          "position": "정기",
+          "position_en": "primary",
+          "ten_god": "정재"
+        }
+      ],
+      "twelve_stage": "태",
+      "is_void": true
+    },
+    "day": {
+      "stem": "庚",
+      "branch": "戌",
+      "ganzhi": "庚戌",
+      "stem_element": "metal",
+      "branch_element": "earth",
+      "ten_god": {
+        "stem": "일원",
+        "branch": "편인"
+      },
+      "hidden_stems": [
+        {
+          "stem": "辛",
+          "position": "여기",
+          "position_en": "residual",
+          "ten_god": "겁재"
+        },
+        {
+          "stem": "丁",
+          "position": "중기",
+          "position_en": "middle",
+          "ten_god": "정관"
+        },
+        {
+          "stem": "戊",
+          "position": "정기",
+          "position_en": "primary",
+          "ten_god": "편인"
+        }
+      ],
+      "twelve_stage": "쇠",
+      "is_void": false,
+      "day_master": true
+    },
+    "hour": {
+      "stem": "辛",
+      "branch": "巳",
+      "ganzhi": "辛巳",
+      "stem_element": "metal",
+      "branch_element": "fire",
+      "ten_god": {
+        "stem": "겁재",
+        "branch": "편관"
+      },
+      "hidden_stems": [
+        {
+          "stem": "戊",
+          "position": "여기",
+          "position_en": "residual",
+          "ten_god": "편인"
+        },
+        {
+          "stem": "庚",
+          "position": "중기",
+          "position_en": "middle",
+          "ten_god": "비견"
+        },
+        {
+          "stem": "丙",
+          "position": "정기",
+          "position_en": "primary",
+          "ten_god": "편관"
+        }
+      ],
+      "twelve_stage": "장생",
+      "is_void": false
+    }
+  },
+  "gongmang": {
+    "xun": "甲辰",
+    "void_branches": [
+      "寅",
+      "卯"
+    ],
+    "void_pillars": [
+      "month"
+    ]
+  },
+  "relations": [
+    {
+      "type": "육합",
+      "subtype": null,
+      "pillars": [
+        "월지",
+        "일지"
+      ],
+      "pillar_keys": [
+        "month",
+        "day"
+      ],
+      "branches": [
+        "卯",
+        "戌"
+      ]
+    },
+    {
+      "type": "형",
+      "subtype": "상형",
+      "pillars": [
+        "년지",
+        "월지"
+      ],
+      "pillar_keys": [
+        "year",
+        "month"
+      ],
+      "branches": [
+        "子",
+        "卯"
+      ]
+    }
+  ],
+  "true_solar_time": {
+    "before_local": "1996-03-14 11:11:00",
+    "after_true_solar": "1996-03-14 10:29:15",
+    "longitude_correction_min": -32.09,
+    "equation_of_time_min": -9.66,
+    "total_correction_min": -41.74
+  },
+  "five_elements": {
+    "wood": {
+      "count": 1,
+      "pct": 12.5
+    },
+    "fire": {
+      "count": 2,
+      "pct": 25.0
+    },
+    "earth": {
+      "count": 1,
+      "pct": 12.5
+    },
+    "metal": {
+      "count": 3,
+      "pct": 37.5
+    },
+    "water": {
+      "count": 1,
+      "pct": 12.5
+    }
+  },
+  "shensha": [
+    {
+      "name": "화개",
+      "hanja": "華蓋",
+      "pillars": [
+        "일주"
+      ],
+      "rule": "연지 子→辰 / 일지 戌→戌"
+    },
+    {
+      "name": "도화",
+      "hanja": "桃花",
+      "pillars": [
+        "월주"
+      ],
+      "rule": "연지 子→酉 / 일지 戌→卯"
+    },
+    {
+      "name": "괴강",
+      "hanja": "魁罡",
+      "pillars": [
+        "일주"
+      ],
+      "rule": "일주 庚戌"
+    }
+  ],
+  "character": {
+    "name_ko": "고요한 호수",
+    "name_en": "The Still Lake",
+    "tagline": "깊이 사유하고, 천천히, 그러나 단단하게 흐르는 사람.",
+    "representative_shensha": "화개",
+    "day_master_element": "metal",
+    "base_tone": "수",
+    "selection_basis": "표상 신살 '화개' (일주)"
+  },
+  "luck_pillars": {
+    "direction": "reverse",
+    "direction_ko": "역행",
+    "gender": "여성",
+    "start_age": 3,
+    "rule": "연간 丙(양) + 여성 → 역행 (양남음녀 순행 / 음남양녀 역행)",
+    "count": 9,
+    "pillars": [
+      {
+        "index": 1,
+        "start_age": 3,
+        "start_year": 1999,
+        "ganzhi": "庚寅",
+        "stem": "庚",
+        "branch": "寅",
+        "stem_element": "metal",
+        "branch_element": "wood"
+      },
+      {
+        "index": 2,
+        "start_age": 13,
+        "start_year": 2009,
+        "ganzhi": "己丑",
+        "stem": "己",
+        "branch": "丑",
+        "stem_element": "earth",
+        "branch_element": "earth"
+      },
+      {
+        "index": 3,
+        "start_age": 23,
+        "start_year": 2019,
+        "ganzhi": "戊子",
+        "stem": "戊",
+        "branch": "子",
+        "stem_element": "earth",
+        "branch_element": "water"
+      },
+      {
+        "index": 4,
+        "start_age": 33,
+        "start_year": 2029,
+        "ganzhi": "丁亥",
+        "stem": "丁",
+        "branch": "亥",
+        "stem_element": "fire",
+        "branch_element": "water"
+      },
+      {
+        "index": 5,
+        "start_age": 43,
+        "start_year": 2039,
+        "ganzhi": "丙戌",
+        "stem": "丙",
+        "branch": "戌",
+        "stem_element": "fire",
+        "branch_element": "earth"
+      },
+      {
+        "index": 6,
+        "start_age": 53,
+        "start_year": 2049,
+        "ganzhi": "乙酉",
+        "stem": "乙",
+        "branch": "酉",
+        "stem_element": "wood",
+        "branch_element": "metal"
+      },
+      {
+        "index": 7,
+        "start_age": 63,
+        "start_year": 2059,
+        "ganzhi": "甲申",
+        "stem": "甲",
+        "branch": "申",
+        "stem_element": "wood",
+        "branch_element": "metal"
+      },
+      {
+        "index": 8,
+        "start_age": 73,
+        "start_year": 2069,
+        "ganzhi": "癸未",
+        "stem": "癸",
+        "branch": "未",
+        "stem_element": "water",
+        "branch_element": "earth"
+      },
+      {
+        "index": 9,
+        "start_age": 83,
+        "start_year": 2079,
+        "ganzhi": "壬午",
+        "stem": "壬",
+        "branch": "午",
+        "stem_element": "water",
+        "branch_element": "fire"
+      }
+    ]
+  },
+  "annual_fortune": {
+    "base_year": 2026,
+    "day_master": "庚",
+    "pillars": [
+      {
+        "year": 2026,
+        "ganzhi": "丙午",
+        "stem": "丙",
+        "branch": "午",
+        "stem_element": "fire",
+        "branch_element": "fire",
+        "stem_ten_god": "편관",
+        "branch_ten_god": "정관"
+      },
+      {
+        "year": 2027,
+        "ganzhi": "丁未",
+        "stem": "丁",
+        "branch": "未",
+        "stem_element": "fire",
+        "branch_element": "earth",
+        "stem_ten_god": "정관",
+        "branch_ten_god": "정인"
+      },
+      {
+        "year": 2028,
+        "ganzhi": "戊申",
+        "stem": "戊",
+        "branch": "申",
+        "stem_element": "earth",
+        "branch_element": "metal",
+        "stem_ten_god": "편인",
+        "branch_ten_god": "비견"
+      },
+      {
+        "year": 2029,
+        "ganzhi": "己酉",
+        "stem": "己",
+        "branch": "酉",
+        "stem_element": "earth",
+        "branch_element": "metal",
+        "stem_ten_god": "정인",
+        "branch_ten_god": "겁재"
+      },
+      {
+        "year": 2030,
+        "ganzhi": "庚戌",
+        "stem": "庚",
+        "branch": "戌",
+        "stem_element": "metal",
+        "branch_element": "earth",
+        "stem_ten_god": "비견",
+        "branch_ten_god": "편인"
+      }
+    ]
+  },
+  "monthly_fortune": {
+    "base_year": 2026,
+    "base_month": 7,
+    "day_master": "庚",
+    "pillars": [
+      {
+        "year": 2026,
+        "month": 7,
+        "ganzhi": "乙未",
+        "stem": "乙",
+        "branch": "未",
+        "stem_element": "wood",
+        "branch_element": "earth",
+        "stem_ten_god": "정재",
+        "branch_ten_god": "정인"
+      },
+      {
+        "year": 2026,
+        "month": 8,
+        "ganzhi": "丙申",
+        "stem": "丙",
+        "branch": "申",
+        "stem_element": "fire",
+        "branch_element": "metal",
+        "stem_ten_god": "편관",
+        "branch_ten_god": "비견"
+      },
+      {
+        "year": 2026,
+        "month": 9,
+        "ganzhi": "丁酉",
+        "stem": "丁",
+        "branch": "酉",
+        "stem_element": "fire",
+        "branch_element": "metal",
+        "stem_ten_god": "정관",
+        "branch_ten_god": "겁재"
+      },
+      {
+        "year": 2026,
+        "month": 10,
+        "ganzhi": "戊戌",
+        "stem": "戊",
+        "branch": "戌",
+        "stem_element": "earth",
+        "branch_element": "earth",
+        "stem_ten_god": "편인",
+        "branch_ten_god": "편인"
+      },
+      {
+        "year": 2026,
+        "month": 11,
+        "ganzhi": "己亥",
+        "stem": "己",
+        "branch": "亥",
+        "stem_element": "earth",
+        "branch_element": "water",
+        "stem_ten_god": "정인",
+        "branch_ten_god": "식신"
+      },
+      {
+        "year": 2026,
+        "month": 12,
+        "ganzhi": "庚子",
+        "stem": "庚",
+        "branch": "子",
+        "stem_element": "metal",
+        "branch_element": "water",
+        "stem_ten_god": "비견",
+        "branch_ten_god": "상관"
+      }
+    ]
+  },
+  "daily_fortune": {
+    "date": "2026-07-01",
+    "day_ganzhi": "丙子",
+    "day_stem": "丙",
+    "day_branch": "子",
+    "day_stem_element": "fire",
+    "day_branch_element": "water",
+    "ten_god": "편관",
+    "matched_field": "love",
+    "overall_score": 48,
+    "score_basis": "오늘 일진은 丙子. 천간 丙(화·火)는 내 분포에서 적정(화 25%), 지지 子(수·水)는 부족(수 12%) → 오행 균형 기여 +6. 일간 庚 대비 십성은 천간 '편관'(지지 '상관') → 십성 기여 -8. → 50(중립) 기준 종합 48점. 오늘의 기운은 '애정·관계' 쪽으로 모이는 흐름이에요.",
+    "tone_line": "조금씩 채워지는 흐름이 도는 날이에요",
+    "fields": {
+      "wealth": 49,
+      "love": 78,
+      "health": 49,
+      "growth": 49
+    }
+  },
+  "calc_meta": {
+    "timezone": "Asia/Seoul",
+    "birth_city": "서울",
+    "latitude_used": 37.5665,
+    "longitude_used": 126.978,
+    "standard_meridian": 135.0,
+    "true_solar_time_applied": true,
+    "ruleset": "kr_saju",
+    "lunar_date": "一九九六年正月廿五",
+    "year_ganzhi": "丙子",
+    "engine_version": "0.3.0",
+    "limitations": [
+      "균시차 근사식(실측 최대 ~1.4분·12월, RMS ~38초), 정밀 천체력 미적용",
+      "시간대/DST·한국 표준자오선 이력 미반영",
+      "자시(子時) 경계 룰셋 미적용",
+      "오행 분포는 지장간 미포함(천간·지지 8글자)"
+    ]
+  }
+}

@@ -1,0 +1,5 @@
+# Cloud Run 빌드에 불필요한 파일 제외
+__pycache__/
+*.pyc
+golden_set.py
+sample_chart.json

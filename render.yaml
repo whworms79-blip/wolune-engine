@@ -1,0 +1,13 @@
+# Render Blueprint — 이 리포지토리를 Render에 연결하면 자동으로 서비스가 구성됩니다.
+# (또는 Render 대시보드에서 New → Web Service → 이 리포 선택 → Docker 감지 → 배포)
+services:
+  - type: web
+    name: wolune-engine
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free            # 무료(15분 무접속 시 슬립 → 첫 요청 콜드스타트)
+    region: singapore     # Render 무료 리전 중 한국에 가장 가까움
+    envVars:
+      - key: WOLUNE_ALLOW_ORIGIN
+        value: "*"        # 웹앱(브라우저)에서 호출 허용. 나중에 도메인으로 좁혀도 됨.
+    # HOST=0.0.0.0 는 Dockerfile ENV, PORT 는 Render 가 자동 주입.
