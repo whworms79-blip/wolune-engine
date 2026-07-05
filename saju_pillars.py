@@ -103,15 +103,17 @@ def compute_five_elements(pillars):
     return: { 오행: {"count": n, "pct": float}, ... } 와 글자별 내역
     """
     counts = {e: 0 for e in ELEMENT_ORDER}
-    detail = []  # (글자, 오행) 8건
+    detail = []  # (글자, 오행) — 시주 있으면 8건, 시간 미상이면 6건
     for key in ("year", "month", "day", "hour"):
+        if key not in pillars:   # 시간 미상 → 시주(時柱) 제외
+            continue
         gan, zhi = pillars[key]["gan"], pillars[key]["zhi"]
         counts[STEM_ELEMENT[gan]] += 1
         counts[BRANCH_ELEMENT[zhi]] += 1
         detail.append((gan, STEM_ELEMENT[gan]))
         detail.append((zhi, BRANCH_ELEMENT[zhi]))
 
-    total = sum(counts.values())  # 항상 8
+    total = sum(counts.values())  # 8(시주 있음) 또는 6(시간 미상)
     dist = {e: {"count": counts[e], "pct": counts[e] / total * 100} for e in ELEMENT_ORDER}
     return dist, detail
 
@@ -159,11 +161,13 @@ SHENSHA_ORDER = ["천을귀인", "문창귀인", "역마", "화개", "도화", "
 def _zhi_in(pillars, targets):
     """지지가 targets(집합/리스트)에 드는 기둥 라벨 목록."""
     ts = targets if isinstance(targets, (set, list, tuple)) else [targets]
-    return [PILLAR_LABEL[k] for k in ("year", "month", "day", "hour") if pillars[k]["zhi"] in ts]
+    return [PILLAR_LABEL[k] for k in ("year", "month", "day", "hour")
+            if k in pillars and pillars[k]["zhi"] in ts]
 
 
 def _gan_in(pillars, target):
-    return [PILLAR_LABEL[k] for k in ("year", "month", "day", "hour") if pillars[k]["gan"] == target]
+    return [PILLAR_LABEL[k] for k in ("year", "month", "day", "hour")
+            if k in pillars and pillars[k]["gan"] == target]
 
 
 def compute_shensha(pillars):
@@ -197,7 +201,8 @@ def compute_shensha(pillars):
     # 괴강(일주 간지) / 백호(어느 기둥이든)
     res["괴강"] = {"pillars": [PILLAR_LABEL["day"]] if day_ganzhi in KUIGANG else [],
                    "basis": f"일주 {day_ganzhi}"}
-    baihu_hits = [PILLAR_LABEL[k] for k in ("year", "month", "day", "hour") if pillars[k]["ganzhi"] in BAIHU]
+    baihu_hits = [PILLAR_LABEL[k] for k in ("year", "month", "day", "hour")
+                  if k in pillars and pillars[k]["ganzhi"] in BAIHU]
     res["백호"] = {"pillars": baihu_hits, "basis": "간지(백호대살 7간지)"}
 
     for name in res:
@@ -557,8 +562,9 @@ def _rel(type_, subtype, pillar_keys, branches):
 
 
 def compute_relations(pillars):
-    """네 지지(년·월·일·시) 사이의 형충회합. 실제 존재하는 쌍/조합만 반환."""
-    keys = ("year", "month", "day", "hour")
+    """네 지지(년·월·일·시) 사이의 형충회합. 실제 존재하는 쌍/조합만 반환.
+    시간 미상이면 시지(時支)가 없어 년·월·일 3지지만 본다."""
+    keys = tuple(k for k in ("year", "month", "day", "hour") if k in pillars)
     zhi = {k: pillars[k]["zhi"] for k in keys}
     present = {}                                    # 지지 → 그 지지를 가진 기둥 키들
     for k in keys:
@@ -800,7 +806,7 @@ def compute_chart(dt_raw, lat=None, lng=None,
                   apply_tst=True, timezone="Asia/Seoul", ruleset="kr_saju",
                   gender="female", calendar="solar", is_leap_month=False, city=None,
                   target_year=None, target_month=None, target_date=None,
-                  reference_date=None):
+                  reference_date=None, hour_known=True):
     """
     전체 파이프라인을 돌려 기술명세 §7.3 형태의 구조화된 dict를 반환한다.
     화면이 그대로 소비할 /v1/chart 응답 후보.
@@ -850,6 +856,12 @@ def compute_chart(dt_raw, lat=None, lng=None,
     chart_pillars = tst_pillars if apply_tst else raw_pillars
     dt_chart = dt_tst if apply_tst else dt_raw
 
+    # 시간 미상(hour_known=False): 시주(時柱)를 아예 제외한다(PRD §6.1).
+    # 오행·신살·형충회합·명식이 모두 년·월·일 6글자/3지지 기준으로 계산됨.
+    # (서버는 이때 정오 12:00으로 넘겨 일주가 자시·진태양시 경계에 흔들리지 않게 한다)
+    if not hour_known:
+        chart_pillars = {k: v for k, v in chart_pillars.items() if k != "hour"}
+
     # 2) 파생: 오행·신살·캐릭터·대운
     dist, _ = compute_five_elements(chart_pillars)
     ss = compute_shensha(chart_pillars)
@@ -871,9 +883,11 @@ def compute_chart(dt_raw, lat=None, lng=None,
     # 공망(空亡): 일주 기준 순중에서 빠지는 2지지. 각 기둥 지지가 여기 속하면 is_void.
     gm_xun, gm_voids = compute_gongmang(day_gan, chart_pillars["day"]["zhi"])
 
-    # 3) pillars 블록
+    # 3) pillars 블록 (시간 미상이면 hour 키 없음)
     pillars_out = {}
     for k in PILLAR_KEYS:
+        if k not in chart_pillars:
+            continue
         p = chart_pillars[k]
         block = {
             "stem": p["gan"],
@@ -937,6 +951,7 @@ def compute_chart(dt_raw, lat=None, lng=None,
             "timezone": timezone,
             "true_solar_time_applied": apply_tst,
             "gender": luck["gender"],
+            "hour_known": hour_known,                  # 시간 미상이면 False(시주 제외)
         },
         "pillars": pillars_out,
         # 공망(空亡): 일주 순중(旬中)에서 빠진 2지지 + 해당되는 기둥.
@@ -944,7 +959,7 @@ def compute_chart(dt_raw, lat=None, lng=None,
             "xun": gm_xun,                                  # 순두(旬首), 예: 甲辰
             "void_branches": gm_voids,                      # 공망 2지지, 예: ["寅","卯"]
             "void_pillars": [k for k in PILLAR_KEYS         # 지지가 공망인 기둥
-                             if chart_pillars[k]["zhi"] in gm_voids],
+                             if k in chart_pillars and chart_pillars[k]["zhi"] in gm_voids],
         },
         # 형충회합(刑沖會合): 네 지지 사이 관계(육합·삼합·방합·육충·육해·형·파).
         "relations": compute_relations(chart_pillars),
@@ -993,6 +1008,10 @@ def compute_chart(dt_raw, lat=None, lng=None,
             ],
         },
     }
+    # 시간 미상: 시주 제외로 오행이 6글자 기준임을 명시(정직한 한계 공개).
+    if not hour_known:
+        chart["calc_meta"]["limitations"].insert(
+            0, "출생시간 미상 — 시주(時柱) 제외, 오행은 천간·지지 6글자 기준")
     return chart
 
 

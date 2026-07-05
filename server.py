@@ -115,7 +115,11 @@ class ChartHandler(BaseHTTPRequestHandler):
 
         qs = parse_qs(parsed.query)
         try:
-            dt = _parse_dt(_first(qs, "date"), _first(qs, "time"))
+            # 시간 미상(time 미제공)이면 시주(時柱) 제외 + 일주가 자시·진태양시 경계에
+            # 흔들리지 않게 정오(12:00) 기준으로 계산한다(PRD §6.1).
+            time_raw = _first(qs, "time")
+            hour_known = bool(time_raw and str(time_raw).strip())
+            dt = _parse_dt(_first(qs, "date"), time_raw if hour_known else "12:00:00")
             # 검증 범위 밖 연도는 lunar-python 값이 부정확할 수 있어 거부(무음 오답 방지)
             if not (MIN_YEAR <= dt.year <= MAX_YEAR):
                 raise ValueError("date 의 연도는 %d~%d 범위여야 합니다." % (MIN_YEAR, MAX_YEAR))
@@ -154,7 +158,7 @@ class ChartHandler(BaseHTTPRequestHandler):
 
         try:
             chart = compute_chart(dt, city=city, lat=lat, lng=lng,
-                                  apply_tst=apply_tst, gender=gender,
+                                  apply_tst=apply_tst, gender=gender, hour_known=hour_known,
                                   calendar=calendar, is_leap_month=is_leap,
                                   target_year=target_year, target_month=target_month,
                                   target_date=target_date)
