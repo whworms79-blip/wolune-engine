@@ -61,9 +61,13 @@ MAX_BODY_BYTES = 256 * 1024
 # 액세스 로그에서 쿼리스트링을 잘라낸다: `"GET /v1/chart?date=…&city=…" 200` → `"GET /v1/chart" 200`
 _QUERY_RE = re.compile(r'(\s/[^\s?"]*)\?[^\s"]*')
 
+from fortune_copy import _assert_covers_ten_gods  # noqa: E402
+
 # 사전이 엔진 어휘(십성·12운성·형충회합·지장간 위치)를 다 덮는지 기동 시 확인.
 # 빠진 게 있으면 여기서 죽는다 — 조용히 넘어가면 사용자 화면에 뜻 없는 생 한자가 뜬다.
 _assert_covers_engine_vocabulary()
+# 세운·월운 문구가 십성 10종을 다 덮는지도 같은 이유로 확인(빠지면 빈 문구가 뜬다).
+_assert_covers_ten_gods()
 
 DEFAULT_PORT = 8000
 DEFAULT_LAT = 37.5665

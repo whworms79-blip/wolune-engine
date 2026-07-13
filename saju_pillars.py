@@ -28,7 +28,10 @@ from datetime import datetime, timedelta
 from lunar_python import Solar, Lunar
 from lunar_python.util import LunarUtil
 
-ENGINE_VERSION = "0.3.0"
+# 세운·월운 해석 문구(웹·앱 공용 단일 출처). 계산이 아니라 '사람 말'만 여기서 온다.
+from fortune_copy import year_copy, month_copy
+
+ENGINE_VERSION = "0.4.0"
 
 # --- 룰셋/상수 (명세 §6: 추후 config화. 지금은 한국 기본값) -------------------
 KST_STANDARD_MERIDIAN = 135.0          # 한국 표준자오선 (135°E, KST 기준)
@@ -660,18 +663,27 @@ def compute_annual_fortune(day_gan, base_year, dist, span=5):
         block["fields"] = fs["fields"]
         block["matched_field"] = fs["matched"]
         block["overall_score"] = fs["overall"]
+        # 해석 문구는 엔진이 준다 — 예전엔 웹(chart.ts)과 앱(saju_view.dart)이 같은
+        # 십성 문구 테이블을 각자 하드코딩하고 있었다(두 벌).
+        block["copy"] = year_copy(block["stem_ten_god"])
         out.append(block)
     return out
 
 
 def compute_monthly_fortune(day_gan, base_year, base_month, span=6):
-    """월운: base 연-월부터 span개월치 월간지 + 오행 + 십성."""
+    """월운: base 연-월부터 span개월치 월간지 + 오행 + 십성 + 해석 문구.
+
+    ※ 월운엔 점수를 매기지 않는다. 달마다 점수를 매기면 '나쁜 달'이 생긴다.
+      좋은 달/나쁜 달이 아니라 '각기 다른 결의 달'로만 말한다(fortune_copy.py 참고).
+    """
     out = []
     y, m = base_year, base_month
     for _ in range(span):
         gan, zhi = _month_pillar_ganzhi(y, m)
         block = {"year": y, "month": m}
         block.update(_fortune_block(gan, zhi, day_gan))
+        # 해석 문구는 엔진이 준다 — 웹·앱이 각자 문구 테이블을 갖지 않도록.
+        block["copy"] = month_copy(block["stem_ten_god"])
         out.append(block)
         m += 1
         if m > 12:
