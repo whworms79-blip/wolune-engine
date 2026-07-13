@@ -41,6 +41,11 @@ from urllib.parse import urlparse, parse_qs
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from saju_pillars import compute_chart, to_json, SEOUL_LONGITUDE  # noqa: E402
+from glossary import payload as glossary_payload, _assert_covers_engine_vocabulary  # noqa: E402
+
+# 사전이 엔진 어휘(십성·12운성·형충회합·지장간 위치)를 다 덮는지 기동 시 확인.
+# 빠진 게 있으면 여기서 죽는다 — 조용히 넘어가면 사용자 화면에 뜻 없는 생 한자가 뜬다.
+_assert_covers_engine_vocabulary()
 
 DEFAULT_PORT = 8000
 DEFAULT_LAT = 37.5665
@@ -105,11 +110,17 @@ class ChartHandler(BaseHTTPRequestHandler):
         # 헬스체크(Render/Cloud Run 등 플랫폼이 / 에 200을 기대) — 가볍게 응답.
         if parsed.path in ("/", "/healthz"):
             self._send_json(200, {"ok": True, "service": "wolune-engine",
-                                  "endpoint": "GET /v1/chart"})
+                                  "endpoints": ["GET /v1/chart", "GET /v1/glossary"]})
             return
+
+        # 용어사전 — 웹·앱 공용 진실의 원천. 자주 안 바뀌므로 클라이언트가 오래 캐시해도 된다.
+        if parsed.path == "/v1/glossary":
+            self._send_json(200, glossary_payload())
+            return
+
         if parsed.path != "/v1/chart":
             self._send_json(404, {"error": "not_found",
-                                  "message": "GET /v1/chart 만 지원합니다.",
+                                  "message": "GET /v1/chart 또는 GET /v1/glossary 만 지원합니다.",
                                   "path": parsed.path})
             return
 
