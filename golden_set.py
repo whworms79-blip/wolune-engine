@@ -9,6 +9,13 @@ Wolune 만세력 엔진 — 골든셋 회귀 테스트 (기술명세 §9)
 이 파일은 1단계 — **검증 틀(러너) + 이미 검증한 기존 케이스**만 담는다.
 경계 케이스(입춘 연주 전환·절입 ±1분·자시 경계·DST 등 §9.2)는 다음 단계에서 추가한다.
 
+담고 있는 검사:
+    1. 고정 케이스 — 입력 → 기대 팔자/오행/신살/캐릭터 (박제)
+    2. 오늘의 운세 근거 불변식 — base + Σdelta == score (근거 카드가 거짓말 못 하게)
+    3. ★ 오늘의 운세 분포 가드 — 점수가 실제로 퍼져 있는가.
+       궁합이 앓았던 병("다들 80점대", 변별력 0)을 여기서도 막는다. 1·2는 그 상태에서도
+       멀쩡히 통과한다 — 덧셈이 맞는 것과 점수가 쓸모 있는 것은 다른 문제다.
+
 실행:
     python engine/golden_set.py          # 전체 케이스 검사 (실패 시 종료코드 1)
     python engine/golden_set.py -v       # 통과 케이스도 필드별로 상세 출력
@@ -19,6 +26,7 @@ Wolune 만세력 엔진 — 골든셋 회귀 테스트 (기술명세 §9)
 """
 
 import random
+import statistics
 import sys
 from datetime import date, datetime, timedelta
 
@@ -462,11 +470,14 @@ def run(cases=GOLDEN_CASES, verbose=False):
 
     total = len(cases)
     daily_ok = run_daily_basis_invariant()
+    dist_ok = run_daily_distribution()
     print(line)
-    print(f"  요약: 사주 {passed_n}/{total} · 오늘운세 근거 {'OK' if daily_ok else '실패'}",
-          "✅ 전부 통과" if passed_n == total and daily_ok else "❌ 실패 있음")
+    print(f"  요약: 사주 {passed_n}/{total}"
+          f" · 오늘운세 근거 {'OK' if daily_ok else '실패'}"
+          f" · 오늘운세 분포 {'OK' if dist_ok else '실패'}",
+          "✅ 전부 통과" if passed_n == total and daily_ok and dist_ok else "❌ 실패 있음")
     print(line)
-    return passed_n == total and daily_ok
+    return passed_n == total and daily_ok and dist_ok
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -505,6 +516,78 @@ def run_daily_basis_invariant():
     print(f"[{mark}] 오늘운세 근거  base + Σdelta == score  "
           f"({DAILY_N_PEOPLE}명 × {DAILY_N_DAYS}일 = {checked}건, 불일치 {bad}건)")
     return bad == 0
+
+
+# ─────────────────────────────────────────────────────────────────────
+# 오늘의 운세 — 분포 가드
+# ─────────────────────────────────────────────────────────────────────
+# ★ 점수가 실제로 퍼져 있는가. 궁합(golden_compat.py)과 같은 방식이다.
+#
+# 왜 필요한가: 궁합이 정확히 이 병을 앓았다 — 평균 84.1 / σ 7.4 로 **사실상 모두가
+# 80점대**였고(변별력 0), 아무도 몰랐다. 불변식(base+Σdelta==score)은 그 상태에서도
+# 멀쩡히 통과한다. 덧셈이 맞는 것과 점수가 쓸모 있는 것은 다른 문제다.
+# 오늘의 운세는 지금 건강하다 — 그 건강을 고정해 둔다.
+#
+# 목표치 — 2026-07-14 실측(무작위 생일 200명 × 5일, 시드 5개):
+#   평균 60.5~61.0 / σ 10.3~11.1 / p10 46~48 / 범위 25~86 / 최빈 10점구간 30~34%
+# 시드 간 변동은 평균 0.5·σ 0.9 로 매우 작다. 허용폭은 그 **약 5배**로 잡았다:
+#   · 정상적인 가중치 미세조정에는 CI 가 깨지지 않을 만큼 넉넉하고,
+#   · "다들 80점대"로 되돌아가면 반드시 깨질 만큼 좁다(평균이 3점만 밀려도 걸린다).
+# ⚠ 이 값을 고칠 땐 **점수 공식을 의도적으로 바꿨을 때만**. 깨졌다고 범위를 넓히지 말 것 —
+#   그건 가드를 끄는 것이다.
+DIST_N_PEOPLE = 600
+DIST_N_DAYS = 5             # = 3,000 표본 (궁합 분포 가드와 같은 규모)
+DIST_MEAN = (58.0, 63.5)
+DIST_SD = (8.5, 13.0)       # 하한이 핵심 — 분산이 무너지는 게 '다들 87점'의 증상
+DIST_SPREAD_MIN = 20        # p90 - p10. 좁아지면 점수가 한 덩어리로 뭉친 것
+DIST_MODE_BUCKET_MAX = 0.45  # ★ 10점 구간 하나에 45% 넘게 몰리면 뭉친 것 (지금 30~34%)
+DIST_CLAMP_MAX = 0.03       # 0/100 바닥·천장에 3% 넘게 붙으면 공식이 포화된 것
+
+
+def run_daily_distribution():
+    """★ 점수가 실제로 분포하는가. '다들 87점'으로 되돌아가면 여기서 깨진다."""
+    rng = random.Random(31337)
+    scores = []
+    for _ in range(DIST_N_PEOPLE):
+        dt = datetime(rng.randint(1950, 2010), rng.randint(1, 12), rng.randint(1, 28),
+                      rng.randint(0, 23), rng.randint(0, 59))
+        gender = rng.choice(["male", "female"])
+        for _ in range(DIST_N_DAYS):
+            target = (date(2026, 1, 1) + timedelta(days=rng.randint(0, 364))).isoformat()
+            scores.append(compute_chart(dt, city="서울", gender=gender,
+                                        target_date=target)["daily_fortune"]["overall_score"])
+    scores.sort()
+    n = len(scores)
+    mean = statistics.mean(scores)
+    sd = statistics.pstdev(scores)
+    p10 = scores[int(0.10 * (n - 1))]
+    p90 = scores[int(0.90 * (n - 1))]
+    spread = p90 - p10
+    # 10점 구간 중 가장 두꺼운 곳의 비중 — 궁합의 "다들 87점"이 정확히 이 증상이었다.
+    mode_bucket = max(sum(1 for s in scores if lo <= s < lo + 10)
+                      for lo in range(0, 101, 10)) / n
+    clamp = sum(1 for s in scores if s <= 0 or s >= 100) / n
+
+    checks = [
+        ("평균", DIST_MEAN[0] <= mean <= DIST_MEAN[1],
+         "%.1f (기대 %.1f~%.1f)" % (mean, *DIST_MEAN)),
+        ("표준편차", DIST_SD[0] <= sd <= DIST_SD[1],
+         "%.1f (기대 %.1f~%.1f — 낮으면 한 덩어리)" % (sd, *DIST_SD)),
+        ("퍼짐(p90-p10)", spread >= DIST_SPREAD_MIN,
+         "%d (기대 ≥%d)" % (spread, DIST_SPREAD_MIN)),
+        ("최빈 10점구간", mode_bucket <= DIST_MODE_BUCKET_MAX,
+         "%.1f%% (기대 ≤%.0f%% — 넘으면 뭉친 것)" % (mode_bucket * 100,
+                                                DIST_MODE_BUCKET_MAX * 100)),
+        ("클램프(0·100)", clamp <= DIST_CLAMP_MAX,
+         "%.1f%% (기대 ≤%.0f%%)" % (clamp * 100, DIST_CLAMP_MAX * 100)),
+    ]
+    all_ok = all(c[1] for c in checks)
+    print("[%s] 오늘운세 분포  무작위 %d명 × %d일 = %d건 — 최저 %d / 중앙 %d / 최고 %d"
+          % ("PASS" if all_ok else "FAIL", DIST_N_PEOPLE, DIST_N_DAYS, n,
+             scores[0], scores[n // 2], scores[-1]))
+    for name, good, detail in checks:
+        print("       %s %-14s %s" % ("·" if good else "✗", name, detail))
+    return all_ok
 
 
 if __name__ == "__main__":
