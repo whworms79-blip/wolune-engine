@@ -313,8 +313,9 @@ def _good_line(harmony, dom_a, dom_b, weak_a, weak_b, spouse_rel, pairs, a_name,
 
 def _tension_line(harmony, dom_a, dom_b, spouse_rel, pairs):
     if harmony == "control":
-        return ("%s와(과) %s처럼 방식이 다를 수 있어요 — 다름을 틀림으로 읽지 않으면, "
-                "그 다름이 오히려 끌림이 됩니다." % (_el(dom_a), _el(dom_b)))
+        return ("%s%s %s처럼 방식이 다를 수 있어요 — 다름을 틀림으로 읽지 않으면, "
+                "그 다름이 오히려 끌림이 됩니다."
+                % (_el(dom_a), _josa(EL_KO[dom_a], "과", "와"), _el(dom_b)))
     if spouse_rel == "육충":
         return ("두 분의 일지가 부딪히는(충) 자리가 있어, 가까운 사이일수록 사소한 데서 마찰이 날 수 있어요. "
                 "한 박자 쉬어 주면 그 긴장이 서로를 깨우는 힘이 됩니다.")
