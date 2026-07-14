@@ -18,8 +18,9 @@ Wolune 만세력 엔진 — 골든셋 회귀 테스트 (기술명세 §9)
     engine-baseline    : 현재 엔진 출력을 회귀 기준선으로 박제(외부 검증 전, §9.3)
 """
 
+import random
 import sys
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 # 콘솔 코드페이지(cp949 등)와 무관하게 한자/한글이 깨지지 않도록 UTF-8 고정
 try:
@@ -460,9 +461,50 @@ def run(cases=GOLDEN_CASES, verbose=False):
         print("  " + "-" * 60)
 
     total = len(cases)
-    print(f"  요약: {passed_n}/{total} 통과", "✅ 전부 통과" if passed_n == total else "❌ 실패 있음")
+    daily_ok = run_daily_basis_invariant()
     print(line)
-    return passed_n == total
+    print(f"  요약: 사주 {passed_n}/{total} · 오늘운세 근거 {'OK' if daily_ok else '실패'}",
+          "✅ 전부 통과" if passed_n == total and daily_ok else "❌ 실패 있음")
+    print(line)
+    return passed_n == total and daily_ok
+
+
+# ─────────────────────────────────────────────────────────────────────
+# 오늘의 운세 — 점수 근거 불변식
+# ─────────────────────────────────────────────────────────────────────
+DAILY_N_PEOPLE = 120
+DAILY_N_DAYS = 15
+
+
+def run_daily_basis_invariant():
+    """★ base + Σdelta == score. 근거 카드가 거짓말을 못 하게.
+
+    궁합(golden_compat.py)과 같은 불변식이다. 오늘의 운세 점수도 궁합과 마찬가지로
+    우리가 만든 보조 지표이고, 화면에 "이 점수는 이렇게 나왔어요"로 근거를 보여준다.
+    근거의 합이 점수와 어긋나면 정직하게 밝히겠다는 카드가 거짓말을 하는 것이다.
+    (0~100 클램프도 한 줄로 드러내므로 항상 정확히 맞아야 한다.)
+    """
+    rng = random.Random(2026)
+    bad = 0
+    checked = 0
+    for _ in range(DAILY_N_PEOPLE):
+        dt = datetime(rng.randint(1960, 2005), rng.randint(1, 12), rng.randint(1, 28),
+                      rng.randint(0, 23), 0)
+        for d in range(DAILY_N_DAYS):
+            target = (date(2026, 1, 1) + timedelta(days=d * 7)).isoformat()
+            df = compute_chart(dt, city="서울", gender="female",
+                               target_date=target)["daily_fortune"]
+            sb = df["score_basis"]
+            total = sb["base"] + sum(c["delta"] for r in sb["rows"] for c in r["chips"])
+            if total != df["overall_score"] or sb["score"] != df["overall_score"]:
+                bad += 1
+            if not sb.get("disclosure") or not sb.get("rows"):
+                bad += 1
+            checked += 1
+    mark = "PASS" if bad == 0 else "FAIL"
+    print(f"[{mark}] 오늘운세 근거  base + Σdelta == score  "
+          f"({DAILY_N_PEOPLE}명 × {DAILY_N_DAYS}일 = {checked}건, 불일치 {bad}건)")
+    return bad == 0
 
 
 if __name__ == "__main__":

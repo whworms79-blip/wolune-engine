@@ -729,6 +729,19 @@ def compute_monthly_fortune(day_gan, base_year, base_month, span=6):
 # --- 오늘의 운세 점수(daily_fortune): 근거 있는 규칙 기반 ----------------------
 # ⚠ 사주엔 본래 '점수' 개념이 없음. 아래는 (오늘 일진 ↔ 내 사주) 관계를 명시적 규칙으로
 #    수치화한 보조 지표. 50=중립이며, 낮아도 '나쁜 날'이 아니라 '안으로 다지는 날'.
+#    → 이 사실은 화면에서도 밝힌다(score_basis.disclosure). 궁합 점수와 같은 원칙이다.
+#
+# ⚠⚠ 재중심화하지 말 것 — 코드는 "50=중립"이라 말하지만 **실제 중앙값은 60**이다.
+#    (무작위 생일 400명 × 60일 = 24,000건 실측: 평균 60.7 / 표준편차 10.8 / 범위 25~86)
+#    십성 가중치 평균(+6.3)과 오행 균형 기여 평균(+4.4)이 둘 다 양수라 분포가 위로 밀린다.
+#    "그럼 50을 중앙으로 맞추자"는 유혹이 들겠지만, **_daily_tone_line 과 클라이언트의
+#    날씨 문구 임계값(65/55/45)이 지금 분포에 맞춰져 있다.** 점수를 10점 내리면 거의 모두가
+#    "포근한 흐림" 이하로 떨어져 화면이 통째로 어긋난다.
+#    변별력은 멀쩡하다(개인 내 60일 점수 폭 중앙값 46점, 어제→오늘 평균 12.4점 변동).
+#    고장 나지 않은 걸 고치지 말 것. 대신 화면엔 "50에서 시작해"라고 **쓰지 않는다** —
+#    50은 궁합의 74(모집단 실측 기준점)와 달리 임의의 출발점이라, 그렇게 쓰면 55점 받은
+#    사람이 "중립보다 위"라고 오해한다. 근거 카드는 칩의 합만 보여준다.
+#
 # 십성 가중치: 순한 십성(정인·식신·정재 등) +, 도전적 십성(편관·상관·겁재)은 중립~약간-(나쁨 아님)
 TEN_GOD_WEIGHT = {
     "정인": 12, "편인": 6, "식신": 12, "상관": -4, "정재": 10,
@@ -809,6 +822,100 @@ def _field_scores(day_gan, gan, zhi, dist):
     }
 
 
+# 간지 한글 읽기 — 근거 카드의 머리말("오늘 일진은 己丑(기축)이에요")에 쓴다.
+STEM_KO = {"甲": "갑", "乙": "을", "丙": "병", "丁": "정", "戊": "무",
+           "己": "기", "庚": "경", "辛": "신", "壬": "임", "癸": "계"}
+BRANCH_KO = {"子": "자", "丑": "축", "寅": "인", "卯": "묘", "辰": "진", "巳": "사",
+             "午": "오", "未": "미", "申": "신", "酉": "유", "戌": "술", "亥": "해"}
+
+# 오늘의 운세 점수 근거의 마지막 문단 — ★ 절대 빼지 말 것.
+# 궁합 점수와 마찬가지로 이건 우리가 만든 숫자다. 그걸 정직하게 밝히는 게 이 제품의 핵심이다.
+DAILY_DISCLOSURE = (
+    "사주엔 원래 하루 점수가 없어요. 오늘의 일진과 내 사주의 관계를 규칙으로 수치화한 "
+    "보조 지표일 뿐이고, 낮아도 나쁜 날이 아니라 안으로 다지는 날이에요."
+)
+
+
+def _daily_score_basis(gan, zhi, s, overall):
+    """점수 근거를 **구조**로 낸다 — 궁합(compatibility.ScoreBasis)과 같은 스키마.
+
+    두 점수(궁합·오늘의 운세)는 성격도 같고(우리가 만든 보조 지표) 수학도 같다
+    (기준값 + 기여도의 합). 근거의 모양이 다르면 사용자는 두 화면을 다른 제품처럼 느낀다.
+
+    ★ 불변식: base + 모든 delta 의 합 == score. 항상. (0~100 클램프도 한 줄로 드러낸다.)
+    ⚠ 화면엔 base(50)를 "여기서 시작해"로 쓰지 **않는다** — 위 주석 참고.
+      50 은 궁합의 74 와 달리 실측 기준점이 아니다(실제 중앙값은 60).
+
+    kind 는 he/minor/neutral 이라는 **의미**만 준다. 색(라벤더/로즈)은 화면이 정한다.
+    """
+    el_pts, tg_pts = s["el_pts"], s["tg_pts"]
+    sel, bel = s["stem_el"], s["branch_el"]
+    sp, bp = s["stem_pct"], s["branch_pct"]
+    slabel, blabel = s["slabel"], s["blabel"]
+    sg, bg = s["stem_god"], s["branch_god"]
+
+    el = lambda k: "%s(%s)" % (k, ELEMENT_HANJA[k])
+
+    # ── 1) 오행 균형 ──
+    if sel == bel:
+        detail = "천간·지지 모두 %s — 내겐 %s한 기운(%.0f%%)" % (el(sel), slabel, sp)
+    else:
+        detail = "천간 %s %s(%.0f%%) · 지지 %s %s(%.0f%%)" % (
+            el(sel), slabel, sp, el(bel), blabel, bp)
+    if el_pts > 0:
+        tone = "옅은 자리를 채워 주는 날이에요"
+    elif el_pts < 0:
+        tone = "짙은 기운이 더해지니, 차분히 다지기 좋은 날이에요"
+    else:
+        tone = "내 오행 분포와 무리 없이 맞물리는 날이에요"
+
+    rows = [{
+        "key": "elements",
+        "kind": "he" if el_pts >= 0 else "minor",
+        "chips": [{"label": "오행 균형", "delta": el_pts}],
+        "note": "%s. %s" % (detail, tone),
+    }]
+
+    # ── 2) 십성(일간 대비) ──
+    if tg_pts > 0:
+        god_note = "오늘의 기운이 나를 북돋아 주는 결이에요"
+    elif tg_pts == 0:
+        god_note = "오늘의 기운이 나와 담담하게 지나가요"
+    else:
+        god_note = "오늘의 기운이 나를 자극하는 결이에요 — 그 자극이 힘이 되기도 해요"
+    rows.append({
+        "key": "ten_god",
+        "kind": "he" if tg_pts >= 0 else "minor",
+        "chips": [{"label": "일간 %s" % (sg if sg == bg else "%s·%s" % (sg, bg)),
+                   "delta": tg_pts}],
+        "note": god_note,
+    })
+
+    # ── 3) 클램프 — 숨기지 않는다. 이 줄이 있어야 화면의 덧셈이 실제로 맞는다. ──
+    base = 50
+    adj = overall - (base + el_pts + tg_pts)
+    if adj:
+        rows.append({
+            "key": "clamp",
+            "kind": "neutral",
+            "chips": [{"label": "하한 보정" if adj > 0 else "상한 보정", "delta": adj}],
+            "note": ("아무리 어긋나도 0 아래로는 내리지 않아요" if adj > 0
+                     else "아무리 잘 맞아도 100까지만이에요"),
+        })
+
+    assert base + sum(c["delta"] for r in rows for c in r["chips"]) == overall, \
+        "오늘의 운세 근거의 합이 점수와 다르다 — 절대 나오면 안 되는 상태다"
+
+    return {
+        "base": base,
+        "intro": "오늘 일진은 %s%s(%s%s)이에요" % (
+            gan, zhi, STEM_KO.get(gan, gan), BRANCH_KO.get(zhi, zhi)),
+        "rows": rows,
+        "score": overall,
+        "disclosure": DAILY_DISCLOSURE,
+    }
+
+
 def compute_daily_fortune(day_gan, dist, dt):
     """
     오늘의 운세 점수(0~100, 50 중립)와 분야별 점수.
@@ -819,20 +926,9 @@ def compute_daily_fortune(day_gan, dist, dt):
     s = _field_scores(day_gan, gan, zhi, dist)
     el_pts, overall, matched, fields = s["el_pts"], s["overall"], s["matched"], s["fields"]
 
-    # 설명 가능한 근거 + 결 한 줄
-    basis = (
-        "오늘 일진은 {gan}{zhi}. "
-        "천간 {gan}({sel}·{shan})는 내 분포에서 {sl}({sel} {sp:.0f}%), "
-        "지지 {zhi}({bel}·{bhan})는 {bl}({bel} {bp:.0f}%) → 오행 균형 기여 {ep:+d}. "
-        "일간 {dm} 대비 십성은 천간 '{sg}'(지지 '{bg}') → 십성 기여 {tp:+d}. "
-        "→ 50(중립) 기준 종합 {ov}점. 오늘의 기운은 '{fk}' 쪽으로 모이는 흐름이에요."
-    ).format(
-        gan=gan, zhi=zhi, sel=s["stem_el"], shan=ELEMENT_HANJA[s["stem_el"]], bel=s["branch_el"],
-        bhan=ELEMENT_HANJA[s["branch_el"]], sl=s["slabel"], bl=s["blabel"],
-        sp=s["stem_pct"], bp=s["branch_pct"], ep=el_pts, dm=day_gan,
-        sg=s["stem_god"], bg=s["branch_god"], tp=s["tg_pts"], ov=overall,
-        fk=FIELD_KO.get(matched, "—"),
-    )
+    # 점수 근거 — 예전엔 개발자용 로그 문자열 한 덩어리였고(화살표·괄호 범벅) 웹·앱 둘 다
+    # 쓰지 않았다. 궁합은 근거를 보여주는데 오늘의 운세는 안 보여주는 건 앞뒤가 안 맞는다.
+    basis = _daily_score_basis(gan, zhi, s, overall)
 
     return {
         "date": _fmt_dt(dt)[:10],
