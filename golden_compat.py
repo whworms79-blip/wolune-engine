@@ -32,8 +32,10 @@ from datetime import datetime
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", line_buffering=True)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from saju_pillars import compute_chart                      # noqa: E402
-from compatibility import compute_compatibility, BASE, SCORE_MIN  # noqa: E402
+from saju_pillars import compute_chart, compute_relations  # noqa: E402
+from compatibility import (                                # noqa: E402
+    compute_compatibility, branch_relation, BASE, SCORE_MIN,
+)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -102,17 +104,18 @@ CASES = [
     },
     {
         "id": "sanxing",
-        "desc": "★ 삼형(丑戌未) — 클라이언트엔 없던 규칙(형은 子卯 하나뿐이었다)",
-        "a": {"birth_date": "1998-04-10", "birth_time": "00:33", "gender": "female"},
-        "b": {"birth_date": "1960-05-23", "birth_time": "02:48", "gender": "male"},
-        "score": 78,
-        "summary_key": "generate",
+        "desc": "★ 삼형(丑戌未) — 두 사람이 나눠 가져 완성. 한 사람만으론 안 보이는 관계",
+        # A 의 지지에 未, B 의 지지에 丑·戌 → 합쳐야 삼형이 선다. 명식은 세 글자가 다 있을
+        # 때만 삼형으로 보므로(잠긴 규칙), 궁합도 두 사람 지지를 합쳐 판정한다.
+        "a": {"birth_date": "1998-04-25", "birth_time": "14:40", "gender": "female"},
+        "b": {"birth_date": "2000-10-22", "birth_time": "23:54", "gender": "male"},
+        "score": 62,
+        "summary_key": "same",
         "rows": [
-            ("ten_god", "he", "일간 정재·정관", +6),
+            ("ten_god", "minor", "일간 겁재", -7),
             ("spouse", "neutral", "일지 무관계", -1),
-            ("branches", "he", "지지 전반", +0),
-            ("elements", "he", "오행 보완", +0),
-            ("clamp", "neutral", "반올림", -1),
+            ("branches", "chong", "지지 전반", -3),
+            ("elements", "minor", "오행 보완", -1),
         ],
         "must_contain": ["형"],
     },
@@ -121,12 +124,12 @@ CASES = [
         "desc": "한쪽 시간 미상 — 시주 제외(3지지), 자리 가중이 시주 없이도 맞는가",
         "a": {"birth_date": "1996-03-14", "birth_time": "11:11", "gender": "female"},
         "b": {"birth_date": "1994-07-02", "birth_time": None, "gender": "male"},
-        "score": 70,
+        "score": 76,
         "summary_key": "generate",
         "rows": [
             ("ten_god", "he", "일간 정인·상관", +0),
-            ("spouse", "minor", "일지 형", -5),
-            ("branches", "he", "지지 전반", +0),
+            ("spouse", "neutral", "일지 무관계", -1),
+            ("branches", "he", "지지 전반", +2),
             ("elements", "he", "오행 보완", +0),
             ("clamp", "neutral", "반올림", +1),
         ],
@@ -272,20 +275,56 @@ def run_distribution():
     return all_ok
 
 
+ZHI = "子丑寅卯辰巳午未申酉戌亥"
+
+
+def run_rule_parity():
+    """★ 명식과 궁합이 **같은 두 글자를 같은 이름으로 부르는가.**
+
+    엔진화의 이유 그 자체다. 예전엔 명식 화면이 "방합"이라 부르는 관계를 궁합 화면은
+    관계 없음으로 봤다. 이제 규칙표가 한 벌이니, 판정도 한 벌이어야 한다.
+
+    ⚠ 삼형(寅巳申·丑戌未)은 여기서 대조하지 않는다 — 명식도 궁합도 '세 지지가 다 있을 때만'
+      성립시키므로, 두 글자만 넣는 이 검사에선 양쪽 다 관계 없음이 정답이다.
+      (실제로 이 검사가 丑戌 쌍의 불일치를 잡아냈다: 궁합이 두 글자만 보고 형이라 불렀다.)
+    """
+    bad = []
+    for a in ZHI:
+        for b in ZHI:
+            # 명식: 두 지지를 두 기둥에 넣고 관계를 뽑는다(같은 지지면 자형 경로)
+            pillars = {"year": {"zhi": a}, "month": {"zhi": b}}
+            names = {r["type"] for r in compute_relations(pillars)}
+            got = branch_relation(a, b)
+            if got is None:
+                if names:
+                    bad.append((a, b, "궁합=없음", sorted(names)))
+            elif got not in names:
+                bad.append((a, b, "궁합=%s" % got, sorted(names) or ["없음"]))
+
+    n = len(ZHI) * len(ZHI)
+    mark = "PASS" if not bad else "FAIL"
+    print("[%s] 규칙 일치    명식 ↔ 궁합, 지지 %d쌍 전부 같은 이름 (불일치 %d개)"
+          % (mark, n, len(bad)))
+    for x in bad[:8]:
+        print("       ✗ %s%s → %s / 명식=%s" % (x[0], x[1], x[2], x[3]))
+    return not bad
+
+
 def main():
     line = "=" * 64
     print(line)
-    print("  Wolune 궁합 — 회귀 테스트 (고정 케이스 + 불변식 + 분포 가드)")
+    print("  Wolune 궁합 — 회귀 테스트 (규칙 일치 + 고정 케이스 + 불변식 + 분포)")
     print(line)
     ok, total = run_cases(verbose="-v" in sys.argv)
     print("-" * 64)
+    parity = run_rule_parity()
     inv = run_invariant()
     dist = run_distribution()
     print(line)
-    passed = ok == total and inv and dist
-    print("  요약: 고정 %d/%d · 불변식 %s · 분포 %s  →  %s"
-          % (ok, total, "OK" if inv else "실패", "OK" if dist else "실패",
-             "✅ 전부 통과" if passed else "❌ 실패"))
+    passed = ok == total and parity and inv and dist
+    print("  요약: 고정 %d/%d · 규칙일치 %s · 불변식 %s · 분포 %s  →  %s"
+          % (ok, total, "OK" if parity else "실패", "OK" if inv else "실패",
+             "OK" if dist else "실패", "✅ 전부 통과" if passed else "❌ 실패"))
     print(line)
     return 0 if passed else 1
 

@@ -101,9 +101,16 @@ PILLAR_WEIGHT = {"year": 1.0, "month": 2.0, "day": 3.0, "hour": 1.0}
 
 
 def branch_relation(a, b):
-    """두 지지 사이의 관계 하나(가장 강한 것). 없으면 None.
-    ⚠ 명식(compute_relations)과 **같은 규칙표**를 쓴다 — 같은 두 글자를 두 화면이
-      다르게 부르면 안 된다. 다만 명식은 한 사람의 네 지지를, 궁합은 두 사람 사이를 본다."""
+    """두 지지 사이의 쌍(pair) 관계 하나(가장 강한 것). 없으면 None.
+
+    ⚠ 명식(compute_relations)과 **같은 규칙표·같은 판정**이어야 한다. 같은 두 글자를 두
+      화면이 다르게 부르면, 사용자는 어느 쪽을 믿어야 할지 알 수 없다. 그게 엔진화의 이유다.
+      golden_compat 의 rule-parity 검사가 132개 지지 쌍 전부를 대조해 이걸 지킨다.
+
+    ⚠ 삼형(寅巳申·丑戌未)은 여기서 판정하지 않는다. 명식은 **세 지지가 다 있을 때만** 삼형으로
+      본다(잠긴 명리 규칙). 두 글자만 보고 형이라 부르면 丑戌 같은 쌍에서 명식과 어긋난다.
+      → 삼형은 branch_pairs() 가 두 사람의 지지를 **합쳐** 세 글자가 다 모였는지 보고 판정한다.
+    """
     ps = frozenset((a, b))
     if a == b:
         return "형" if a in _ZIXING else None          # 자형(自刑)
@@ -123,23 +130,30 @@ def branch_relation(a, b):
         return "형"                                     # 상형(相刑)
     if ps in _PO:
         return "파"
-    for triple in _SANXING:
-        if a in triple and b in triple:
-            return "형"                                 # 삼형(三刑) — 클라엔 없던 규칙
     return None
 
 
 def branch_pairs(pa, pb):
     """두 사람의 지지 쌍(최대 4×4=16). 관계가 있는 것만, 자리 가중과 함께."""
+    a_keys = [k for k in PILLAR_KEYS if k in pa]
+    b_keys = [k for k in PILLAR_KEYS if k in pb]
+
+    # 삼형(三刑): 두 사람의 지지를 **합쳐** 세 글자가 다 모였을 때만 성립한다(명식과 동일).
+    # 예: A 에 寅·巳, B 에 申 → 세 사람 몫이 아니라 두 사람이 함께 만든 삼형이다.
+    sanxing_hit = set()
+    all_zhi = {pa[k]["branch"] for k in a_keys} | {pb[k]["branch"] for k in b_keys}
+    for triple in _SANXING:
+        if all(z in all_zhi for z in triple):
+            sanxing_hit |= set(triple)
+
     out = []
-    for ka in PILLAR_KEYS:
-        if ka not in pa:
-            continue
-        for kb in PILLAR_KEYS:
-            if kb not in pb:
-                continue
+    for ka in a_keys:
+        for kb in b_keys:
             za, zb = pa[ka]["branch"], pb[kb]["branch"]
             t = branch_relation(za, zb)
+            # 쌍 관계가 따로 없고, 둘 다 완성된 삼형의 구성 지지라면 형(刑)이다.
+            if t is None and za != zb and za in sanxing_hit and zb in sanxing_hit:
+                t = "형"
             if t is None:
                 continue
             out.append({
@@ -173,10 +187,14 @@ def _axis_ten_god(day_a, day_b):
     return (favor - 3) / 5.0 * 100, g_ab, g_ba
 
 
-def _axis_spouse(pa, pb):
-    """축2) 배우자궁 — 일지끼리의 관계 하나. 육합 100 / 무관계 50 / 육충 0."""
-    rel = branch_relation(pa["day"]["branch"], pb["day"]["branch"])
-    return 50 + REL_VALUE.get(rel, 0.0) * 50, rel
+def _axis_spouse(pairs):
+    """축2) 배우자궁 — 일지끼리의 관계 하나. 육합 100 / 무관계 50 / 육충 0.
+    ⚠ branch_pairs 가 낸 판정을 그대로 쓴다 — 같은 일지 쌍을 근거의 두 줄이 다르게 부르면 안 된다
+      (삼형은 두 사람 지지를 합쳐야 성립하므로, 쌍 단위로 다시 계산하면 어긋난다)."""
+    for p in pairs:
+        if p["a_pillar"] == "day" and p["b_pillar"] == "day":
+            return 50 + REL_VALUE[p["type"]] * 50, p["type"]
+    return 50.0, None
 
 
 def _axis_branches(pa, pb):
@@ -345,12 +363,12 @@ def compute_compatibility(chart_a, chart_b, a_name="", b_name=""):
     fa, fb = chart_a["five_elements"], chart_b["five_elements"]
 
     # ── 네 축 ──
+    pairs = branch_pairs(pa, pb)   # 지지 판정은 한 번만 — 두 줄이 다르게 부르지 않도록
     ax1, god_ab, god_ba = _axis_ten_god(pa["day"]["stem"], pb["day"]["stem"])
-    ax2, spouse_rel = _axis_spouse(pa, pb)
+    ax2, spouse_rel = _axis_spouse(pairs)
     ax3 = _axis_branches(pa, pb)
     ax4, harmony, dom_a, dom_b, weak_a, weak_b = _axis_elements(fa, fb)
     axis = (ax1, ax2, ax3, ax4)
-    pairs = branch_pairs(pa, pb)
 
     # ── 점수: 가중 평균 → 모집단 기준으로 펼침 ──
     raw = sum(w * x for w, x in zip(WEIGHTS, axis))
