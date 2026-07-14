@@ -670,8 +670,41 @@ def compute_annual_fortune(day_gan, base_year, dist, span=5):
     return out
 
 
+# 12절(節) — 월간지가 바뀌는 경계. lunar-python 이 내보내는 표기(간체 포함) → 한글.
+# ⚠ 중기(中氣: 우수·춘분·곡우…)는 월을 나누지 않는다. 여기 없는 게 맞다.
+JIE_KO = {
+    "立春": "입춘", "惊蛰": "경칩", "驚蟄": "경칩", "清明": "청명", "立夏": "입하",
+    "芒种": "망종", "芒種": "망종", "小暑": "소서", "立秋": "입추", "白露": "백로",
+    "寒露": "한로", "立冬": "입동", "大雪": "대설", "小寒": "소한",
+}
+
+
+def _month_term_range(year, month):
+    """그 (연-월)의 월간지가 실제로 유효한 **절기 구간**.
+
+    왜 필요한가: 월간지는 양력 달이 아니라 절기로 나뉜다. 2026년 8월의 월간지는 丙申인데,
+    丙申월은 사실 **입추(8/7)부터 백로(9/7)까지**다 — 8월 1~6일은 아직 乙未월이다.
+    화면이 "8월 = 丙申"이라고만 적으면 월초 며칠이 어긋난다. '정확한 만세력'을 내세우면서
+    표시가 며칠 틀리는 건 앞뒤가 안 맞는다. 그래서 구간을 함께 내보내 정직하게 밝힌다.
+
+    기준일은 _month_pillar_ganzhi 와 같은 15일 정오다(그 달의 간지를 대표하는 날).
+    """
+    lunar = Solar.fromYmdHms(year, month, 15, 12, 0, 0).getLunar()
+    jie = lunar.getPrevJie()      # 이 월간지를 연 절
+    nxt = lunar.getNextJie()      # 다음 월간지가 시작되는 절
+    s, e = jie.getSolar(), nxt.getSolar()
+    name = jie.getName()
+    return {
+        "term_name": JIE_KO.get(name, name),          # 입추
+        "term_hanja": name,                            # 立秋
+        "start": s.toYmd(),                            # 2026-08-07
+        "end": e.toYmd(),                              # 2026-09-07 (다음 절 = 이 달의 끝)
+        "label": "%d.%d~%d.%d" % (s.getMonth(), s.getDay(), e.getMonth(), e.getDay()),
+    }
+
+
 def compute_monthly_fortune(day_gan, base_year, base_month, span=6):
-    """월운: base 연-월부터 span개월치 월간지 + 오행 + 십성 + 해석 문구.
+    """월운: base 연-월부터 span개월치 월간지 + 오행 + 십성 + 해석 문구 + 절기 구간.
 
     ※ 월운엔 점수를 매기지 않는다. 달마다 점수를 매기면 '나쁜 달'이 생긴다.
       좋은 달/나쁜 달이 아니라 '각기 다른 결의 달'로만 말한다(fortune_copy.py 참고).
@@ -682,6 +715,8 @@ def compute_monthly_fortune(day_gan, base_year, base_month, span=6):
         gan, zhi = _month_pillar_ganzhi(y, m)
         block = {"year": y, "month": m}
         block.update(_fortune_block(gan, zhi, day_gan))
+        # 이 월간지가 실제로 유효한 절기 구간(양력 달과 며칠 어긋난다는 걸 화면이 밝히도록).
+        block["term"] = _month_term_range(y, m)
         # 해석 문구는 엔진이 준다 — 웹·앱이 각자 문구 테이블을 갖지 않도록.
         block["copy"] = month_copy(block["stem_ten_god"])
         out.append(block)

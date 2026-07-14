@@ -34,10 +34,20 @@ INSIGHT_THRESHOLD = 10
 
 _EL_HANJA = {"목": "木", "화": "火", "토": "土", "금": "金", "수": "水"}
 
-# 오행 경향으로 결론내는 문턱: 표본 2건 이상인 오행만 신뢰, 최고-최저 평균차 0.7 이상.
-# (2건은 노이즈에 약하다 — 3건으로 올리는 건 별도 검토. 지금은 앱 로직 그대로 이식.)
-_MIN_SAMPLES_PER_ELEMENT = 2
-_MIN_ELEMENT_GAP = 0.7
+# 오행 경향으로 결론내는 문턱: 표본 3건 이상인 오행만 신뢰, 최고-최저 평균차 0.7 이상.
+#
+# 2 → 3 으로 올렸다(2026-07-15). 2건이면 "우연히 기분 좋았던 이틀"이 그대로 패턴이 된다.
+# 기록 10건이면 오행 다섯에 평균 2건씩 흩어지니, 문턱이 2일 땐 사실상 아무 필터도 아니었다.
+# 이건 우리가 사용자에게 "당신만의 패턴"이라며 내놓는 문장이다 — 노이즈를 패턴이라 부르면
+# 그 순간 신뢰를 잃는다. 못 여는 것보다 틀리게 여는 게 나쁘다.
+#
+# 대신 패턴이 덜 열린다: 무작위 시뮬레이션에서 오행 분기 적중률이 크게 줄고, 그만큼
+# 상관(Pearson) 분기와 "아직 뚜렷한 패턴은 보이지 않아요"로 넘어간다(3단 폴백은 그대로).
+# 기록이 쌓이면 다시 열리므로, 허탈함보다 정확함을 택한다.
+_MIN_SAMPLES_PER_ELEMENT = 3
+_MIN_ELEMENT_GAP = 0.8
+# 간격이 표본오차의 몇 배 이상이어야 하는가(_beats_noise 참고). 이게 거짓양성을 실제로 막는 축이다.
+_SE_FACTOR = 2.5
 _MIN_CORRELATION = 0.3
 
 _SUPPORT_HINT = "이 느낌이 맞나요? 상관은 인과가 아니에요 — 자기이해의 힌트로 살펴봐 주세요."
@@ -58,6 +68,35 @@ def _pearson(xs, ys):
     if sxx == 0 or syy == 0:
         return 0.0
     return sxy / (math.sqrt(sxx) * math.sqrt(syy))
+
+
+def _beats_noise(high_moods, low_moods, gap):
+    """그 간격이 **표본오차보다 충분히 큰가.**
+
+    왜 필요한가 — 표본 문턱만으로는 안 걸러진다:
+        오행 다섯의 평균 중 **최고와 최저를 골라** 그 차이를 본다. 다섯 중 극단 둘을 뽑는
+        행위 자체가 차이를 부풀린다(다중비교). 그래서 기분이 완전히 무작위인 사람에게도
+        간격 0.7 은 거의 항상 넘어간다 — 시뮬레이션(띄엄띄엄 기록, 4,000명):
+
+            표본2·간격0.7 (옛것)  → 무작위 기분인 사람의 88~96% 에게 오행 패턴 선언
+            표본3·간격0.7        → 기록 10건에선 22% 로 줄지만, 20건 이상에선 다시 92%
+            표본3·간격0.8·2.5×SE → 3~25% (진짜 경향은 80~100% 그대로 잡음)  ← 채택
+
+        즉 표본을 늘려도 최고-최저 간격은 줄지 않는다. 노이즈를 직접 봐야 한다.
+
+    표본오차 SE = sqrt(s_high²/n_high + s_low²/n_low).
+    기분이 들쭉날쭉하거나 표본이 적으면 SE 가 커져, 문턱이 저절로 높아진다.
+
+    ⚠ 이건 우리가 "당신만의 패턴"이라며 내놓는 문장이다. 못 여는 것보다 틀리게 여는 게 나쁘다.
+    """
+    def _var(v):
+        m = sum(v) / len(v)
+        return sum((x - m) ** 2 for x in v) / max(1, len(v) - 1)
+
+    se = math.sqrt(_var(high_moods) / len(high_moods) + _var(low_moods) / len(low_moods))
+    if se == 0:
+        return True  # 두 무리 안이 완전히 균일 → 노이즈가 없다
+    return gap >= _SE_FACTOR * se
 
 
 def compute_insight(entries):
@@ -84,16 +123,15 @@ def compute_insight(entries):
 
     # ── ① 일진 오행 ↔ 기분 : 오행별 평균 기분 ──
     # dict 는 삽입 순서를 지킨다 → 동점일 때 '먼저 나온 오행이 이긴다'(Dart 와 같은 결과).
-    total, count = {}, {}
+    moods = {}
     for e in with_fortune:
         el = STEM_ELEMENT.get((e["day_ganzhi"] or "")[0])
         if el is None:
             continue
-        total[el] = total.get(el, 0) + e["mood"]
-        count[el] = count.get(el, 0) + 1
+        moods.setdefault(el, []).append(e["mood"])
 
-    avg = {el: s / count[el] for el, s in total.items()
-           if count[el] >= _MIN_SAMPLES_PER_ELEMENT}
+    ok = {el: v for el, v in moods.items() if len(v) >= _MIN_SAMPLES_PER_ELEMENT}
+    avg = {el: sum(v) / len(v) for el, v in ok.items()}
 
     high = low = None
     for el, a in avg.items():
@@ -103,7 +141,8 @@ def compute_insight(entries):
             low = el
 
     if high is not None and low is not None and high != low \
-            and (avg[high] - avg[low]) >= _MIN_ELEMENT_GAP:
+            and (avg[high] - avg[low]) >= _MIN_ELEMENT_GAP \
+            and _beats_noise(ok[high], ok[low], avg[high] - avg[low]):
         return {
             **base,
             "pattern": "element",
