@@ -54,6 +54,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from saju_pillars import compute_chart, to_json, SEOUL_LONGITUDE  # noqa: E402
 from glossary import payload as glossary_payload, _assert_covers_engine_vocabulary  # noqa: E402
 from insight import compute_insight, parse_entries  # noqa: E402
+from compatibility import compute_compatibility  # noqa: E402
 
 # POST 바디 상한 — 통찰 요청이 커봐야 수십 KB다. 그 이상은 읽지 않는다.
 MAX_BODY_BYTES = 256 * 1024
@@ -103,6 +104,43 @@ def _first(qs, key, default=None):
     return v[0] if v else default
 
 
+def _chart_from_person(p, who):
+    """궁합 요청의 사람 블록 하나 → compute_chart 결과.
+
+    필드 이름은 GET /v1/chart 의 쿼리 파라미터와 **일부러 똑같이** 맞췄다. 이름이 어긋나면
+    나중에 반드시 사고가 난다(같은 뜻을 두 이름으로 부르는 순간부터).
+    ⚠ 예외 메시지에 사용자 값을 담지 않는다 — 로그·응답에 생년월일이 새면 안 된다.
+    """
+    if not isinstance(p, dict):
+        raise ValueError("'%s' 는 객체여야 합니다." % who)
+
+    time_raw = p.get("birth_time")
+    hour_known = bool(time_raw and str(time_raw).strip())
+    # 시간 미상이면 시주 제외 + 일주가 자시·진태양시 경계에 흔들리지 않게 정오 기준(PRD §6.1).
+    dt = _parse_dt(p.get("birth_date"), time_raw if hour_known else "12:00:00")
+    if not (MIN_YEAR <= dt.year <= MAX_YEAR):
+        raise ValueError("'%s' 의 birth_date 연도는 %d~%d 범위여야 합니다." % (who, MIN_YEAR, MAX_YEAR))
+
+    lat, lng = p.get("lat"), p.get("lng")
+    if (lat is None) != (lng is None):
+        raise ValueError("'%s' 의 lat 와 lng 는 함께 지정해야 합니다." % who)
+    if lat is not None:
+        lat, lng = float(lat), float(lng)
+        if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lng <= 180.0):
+            raise ValueError("'%s' 의 lat/lng 가 범위를 벗어났습니다." % who)
+
+    return compute_chart(
+        dt,
+        city=p.get("city") or p.get("place"),
+        lat=lat, lng=lng,
+        apply_tst=bool(p.get("tst", True)),
+        gender=p.get("gender") or "female",
+        hour_known=hour_known,
+        calendar=p.get("calendar") or "solar",
+        is_leap_month=bool(p.get("is_leap_month", False)),
+    )
+
+
 class ChartHandler(BaseHTTPRequestHandler):
     server_version = "WoluneEngine/0.1"
 
@@ -126,12 +164,12 @@ class ChartHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self._send(204, b"")
 
-    # ---- POST: 무드 통찰(무상태) ----
+    # ---- POST: 무드 통찰 / 궁합 (둘 다 무상태) ----
     def do_POST(self):
         parsed = urlparse(self.path)
-        if parsed.path != "/v1/insight":
+        if parsed.path not in ("/v1/insight", "/v1/compatibility"):
             self._send_json(404, {"error": "not_found",
-                                  "message": "POST 는 /v1/insight 만 지원합니다.",
+                                  "message": "POST 는 /v1/insight 또는 /v1/compatibility 만 지원합니다.",
                                   "path": parsed.path})
             return
 
@@ -149,6 +187,35 @@ class ChartHandler(BaseHTTPRequestHandler):
 
         try:
             body = json.loads(self.rfile.read(length).decode("utf-8"))
+        except Exception:
+            self._send_json(400, {"error": "bad_request", "message": "JSON 을 읽을 수 없습니다."})
+            return
+
+        # ── 궁합 — 점수·근거·문구를 엔진이 만든다(compatibility.py 상단 주석 참고) ──
+        if parsed.path == "/v1/compatibility":
+            try:
+                a = _chart_from_person(body.get("a"), "a")
+                b = _chart_from_person(body.get("b"), "b")
+            except ValueError as e:
+                self._send_json(400, {"error": "bad_request", "message": str(e)})
+                return
+            except Exception:
+                self._send_json(400, {"error": "bad_request",
+                                      "message": "a / b 사람 정보를 읽을 수 없습니다."})
+                return
+            try:
+                name_a = (body.get("a") or {}).get("name") or ""
+                name_b = (body.get("b") or {}).get("name") or ""
+                result = compute_compatibility(a, b, name_a, name_b)
+            except Exception as e:
+                self._send_json(500, {"error": "engine_error", "message": str(e)})
+                return
+            # 무상태 — 계산만 하고 버린다. 저장하지 않는다.
+            self._send_json(200, result)
+            return
+
+        # ── 무드 통찰 ──
+        try:
             entries = parse_entries(body)
         except ValueError as e:
             # ⚠️ 예외 메시지에 사용자 값을 담지 않는다(로그·응답에 무드가 새지 않도록).
@@ -167,7 +234,8 @@ class ChartHandler(BaseHTTPRequestHandler):
         # 헬스체크(Render/Cloud Run 등 플랫폼이 / 에 200을 기대) — 가볍게 응답.
         if parsed.path in ("/", "/healthz"):
             self._send_json(200, {"ok": True, "service": "wolune-engine",
-                                  "endpoints": ["GET /v1/chart", "GET /v1/glossary"]})
+                                  "endpoints": ["GET /v1/chart", "GET /v1/glossary",
+                                                "POST /v1/insight", "POST /v1/compatibility"]})
             return
 
         # 용어사전 — 웹·앱 공용 진실의 원천. 자주 안 바뀌므로 클라이언트가 오래 캐시해도 된다.
